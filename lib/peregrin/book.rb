@@ -69,7 +69,7 @@ class Peregrin::Book
 
 
   def copy_resource_to(resource_path, dest_path)
-    File.open(dest_path, 'w') { |f|
+    File.open(dest_path, 'wb') { |f|
       f << read_resource(resource_path)
     }
   end
