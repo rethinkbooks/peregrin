@@ -7,7 +7,8 @@ class Peregrin::Epub
     :opf => { 'opf' => 'http://www.idpf.org/2007/opf' },
     :dc => { 'dc' => 'http://purl.org/dc/elements/1.1/' },
     :ncx => { 'ncx' => 'http://www.daisy.org/z3986/2005/ncx/' },
-    :svg => { 'svg' => 'http://www.w3.org/2000/svg' }
+    :svg => { 'svg' => 'http://www.w3.org/2000/svg' },
+    :nav => { 'nav' => 'http://www.w3.org/1999/xhtml'}
   }
   OCF_PATH = "META-INF/container.xml"
   HTML5_TAGNAMES = %w[section nav article aside hgroup header footer figure figcaption] # FIXME: Which to divify? Which to leave as-is?
@@ -34,7 +35,7 @@ class Peregrin::Epub
     begin
       book = Peregrin::Book.new
       epub = new(book)
-      epub.send(:load_config_documents, zf)
+      epub.send(:load_blueprints, zf)
     rescue => e
       raise e.class.new(path)
     end
@@ -69,7 +70,7 @@ class Peregrin::Epub
 
 
   def to_book(options = {})
-    bk = @book.deep_clone
+    @book.deep_clone
   end
 
 
@@ -80,63 +81,86 @@ class Peregrin::Epub
     #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
     def load_from_path(epub_path)
-      docs = nil
       Zip::Archive.open(epub_path) { |zipfile|
-        docs = load_config_documents(zipfile)
-        extract_properties(docs[:opf])
-        extract_components(zipfile, docs[:opf], docs[:opf_root])
-        extract_chapters(zipfile, docs[:ncx])
-        extract_cover(zipfile, docs)
+        load_blueprints(zipfile)
+        extract_properties
+        extract_components(zipfile)
+        extract_chapters(zipfile)
+        extract_cover(zipfile)
       }
       @book.read_resource_proc = lambda { |resource|
-        media_path = from_opf_root(docs[:opf_root], resource.src)
-        media_path = URI.unescape(media_path)
-        Zip::Archive.open(epub_path) { |zipfile| zipfile.read(media_path) }
+        media_path = from_opf_root(resource.src)
+        media_path = uri_unescape(media_path)
+        Zip::Archive.open(epub_path) { |zipfile| zipfile.content(media_path) }
       }
     end
 
 
-    def load_config_documents(zipfile)
+    def load_blueprints(zipfile)
       # The OCF file.
       begin
-        docs = { :ocf => Nokogiri::XML::Document.parse(zipfile.read(OCF_PATH)) }
+        ocf_content = zipfile.content(OCF_PATH)
+        ocf = @book.add_blueprint(:ocf, OCF_PATH, ocf_content)
       rescue
         raise FailureLoadingOCF
       end
 
       # The OPF file.
       begin
-        docs[:opf_path] = docs[:ocf].at_xpath(
-          '//ocf:rootfile[@media-type="application/oebps-package+xml"]',
-          NAMESPACES[:ocf]
-        )['full-path']
-        docs[:opf_root] = File.dirname(docs[:opf_path])
-        docs[:opf] = Nokogiri::XML::Document.parse(zipfile.read(docs[:opf_path]))
+        opf_xp = '//ocf:rootfile[@media-type="application/oebps-package+xml"]'
+        opf_src = ocf.document.at_xpath(opf_xp, NAMESPACES[:ocf])['full-path']
+        opf_content = zipfile.content(opf_src)
+        opf = @book.add_blueprint(:opf, opf_src, opf_content)
       rescue
         raise FailureLoadingOPF
       end
 
-      # The NCX file.
-      begin
-        spine = docs[:opf].at_xpath('//opf:spine', NAMESPACES[:opf])
-        ncx_id = spine['toc'] ? spine['toc'] : 'ncx'
-        item = docs[:opf].at_xpath(
-          "//opf:manifest/opf:item[@id=#{escape_for_xpath(ncx_id)}]",
-          NAMESPACES[:opf]
-        )
+      # EPUB version
+      pkg_elem = opf.document.at_xpath('//opf:package', NAMESPACES[:opf])
+      @epub_version = pkg_elem['version']
 
-        docs[:ncx_path] = from_opf_root(docs[:opf_root], item['href'])
-        ncx_content = zipfile.read(docs[:ncx_path])
-        docs[:ncx] = Nokogiri::XML::Document.parse(ncx_content)
-      rescue => e
-        raise FailureLoadingNCX
+      # The NCX file.
+      # Must be present only with Ebook < 3.0 but can be used
+      # for forward compatibility
+      begin
+        spine = opf.document.at_xpath('//opf:spine', NAMESPACES[:opf])
+        ncx_id = spine['toc'] ? spine['toc'] : 'ncx'
+        ncx_xp = "//opf:manifest/opf:item[@id=#{escape_for_xpath(ncx_id)}]"
+        ncx_href = opf.document.at_xpath(ncx_xp, NAMESPACES[:opf])['href']
+        ncx_src = from_opf_root(ncx_href)
+        ncx_content = zipfile.content(ncx_src)
+        ncx = @book.add_blueprint(:ncx, ncx_src, ncx_content)
+      rescue
+        # Only raise an exeption for Ebook with version lower than 3.0
+        raise FailureLoadingNCX if epub_version < 3
       end
 
-      docs
+      # The NAV file. (Epub3 only)
+      if epub_version >= 3
+        begin
+          nav_xp = "//opf:manifest/opf:item[contains"+
+            "(concat(' ', normalize-space(@properties), ' '), ' nav ')]"
+          nav_href = opf.document.at_xpath(nav_xp, NAMESPACES[:opf])['href']
+          nav_src = from_opf_root(nav_href)
+          nav_content = zipfile.content(nav_src)
+          nav = @book.add_blueprint(:nav, nav_src, nav_content)
+        rescue
+          raise FailureLoadingNAV
+        end
+      end
+
+      # The others
+      inf_rels = %w[container manifest metadata signature encryption rights]
+      inf_rels.each { |rel|
+        src = "META-INF/#{rel}.xml"
+        next  unless zipfile.find(src)
+        @book.add_blueprint(rel.to_sym, src, zipfile.content(src))
+      }
     end
 
 
-    def extract_properties(opf_doc)
+    def extract_properties
+      opf_doc = @book.blueprint_for(:opf).document
       meta_elems = opf_doc.at_xpath(
         '//opf:metadata',
         NAMESPACES[:opf]
@@ -153,16 +177,30 @@ class Peregrin::Epub
         end
         atts = elem.attributes.inject({}) { |acc, pair|
           key, attr = pair
-          acc[key] = attr.value  unless ["name", "content"].include?(key)
+          if !["name", "content", "property"].include?(key)
+            acc[key] = attr.value
+          elsif key == "property"
+            @book.add_property(attr.value, elem.text)
+          end
           acc
         }
-        @book.add_property(name, content, atts)
+        @book.add_property(name, content, atts) unless name.nil?
       }
+
+      # Assign EPUB version
+      @book.add_format_property('source', 'EPUB')
+      @book.add_format_property('version', @epub_version)  if @epub_version
+
+      # Extract page-turning direction
+      if spine = opf_doc.at_xpath('//opf:spine', NAMESPACES[:opf])
+        dir = spine['page-progression-direction']
+        @book.add_format_property('page-progression-direction', dir)  if dir
+      end
     end
 
 
-    def extract_components(zipfile, opf_doc, opf_root)
-      ids = {}
+    def extract_components(zipfile)
+      opf_doc = @book.blueprint_for(:opf).document
       manifest = opf_doc.at_xpath('//opf:manifest', NAMESPACES[:opf])
       spine = opf_doc.at_xpath('//opf:spine', NAMESPACES[:opf])
 
@@ -175,18 +213,20 @@ class Peregrin::Epub
           href = item['href']
           linear = iref['linear'] != 'no'
           begin
-            content = zipfile.read(from_opf_root(opf_root, href))
+            content = zipfile.content(from_opf_root(href))
           rescue
-            href = URI.unescape(href)
-            content = zipfile.read(from_opf_root(opf_root, href))
+            href = uri_unescape(href)
+            content = zipfile.content(from_opf_root(href))
           end
-          @book.add_component(
-            href,
-            content,
-            item['media-type'],
-            :id => id,
-            :linear => linear ? "yes" : "no"
-          )
+          atts = { :id => id, :linear => linear ? "yes" : "no" }
+          iref['properties'].split(/\s+/).each do |prop|
+            if prop =~ /^rendition:(layout|orientation|spread)-(.+)$/
+              atts["rendition:#{$1}"] = $2
+            else
+              atts[prop] = true
+            end
+          end if iref['properties']
+          @book.add_component(href, content, item['media-type'], atts)
         end
       }
 
@@ -206,7 +246,17 @@ class Peregrin::Epub
     end
 
 
-    def extract_chapters(zipfile, ncx_doc)
+    def extract_chapters(zipfile)
+      if epub_version >= 3 && nav = @book.blueprint_for(:nav)
+        extract_nav_chapters(zipfile, nav.document)
+      else
+        extract_ncx_chapters(zipfile, @book.blueprint_for(:ncx).document)
+      end
+    end
+
+
+    # Epub < 3.0 only
+    def extract_ncx_chapters(zipfile, ncx_doc)
       curse = lambda { |point|
         chp = Peregrin::Chapter.new(
           point.at_xpath('.//ncx:text', NAMESPACES[:ncx]).content,
@@ -226,7 +276,34 @@ class Peregrin::Epub
     end
 
 
-    def extract_cover(zipfile, docs)
+    # Epub >= 3.0 only
+    def extract_nav_chapters(zipfile, nav_doc)
+      curse = lambda { |point, position|
+        chp = Peregrin::Chapter.new(
+          point.at_xpath('.//nav:a', NAMESPACES[:nav]).content,
+          position,
+          point.at_xpath('.//nav:a', NAMESPACES[:nav])['href']
+        )
+        ol = point.at_xpath('.//nav:ol', NAMESPACES[:nav])
+        ol.children.each { |pt|
+          next  unless pt.element? && pt.name == "li"
+          position += 1
+          position, chapter = curse.call(pt, position)
+          chp.children.push chapter
+        } if ol
+        [position, chp]
+      }
+      position = 0
+      nav_doc.at_xpath("//nav:nav/nav:ol", NAMESPACES[:nav]).children.each { |pt|
+        next  unless pt.element? && pt.name == "li"
+        position += 1
+        position, chapter = curse.call(pt, position)
+        @book.chapters.push chapter
+      }
+    end
+
+
+    def extract_cover(zipfile)
       @book.cover = nil
 
       # 1. Cover image referenced from metadata
@@ -250,9 +327,9 @@ class Peregrin::Epub
       if res.media_type.match(/^image\//)
         @book.cover = res
       else
-        path = from_opf_root(docs[:opf_root], res.src)
+        path = from_opf_root(res.src)
         begin
-          doc = Nokogiri::XML::Document.parse(zipfile.read(path))
+          doc = Nokogiri::XML::Document.parse(zipfile.content(path))
           src = nil
           if img = doc.at_css('img')
             src = img['src']
@@ -522,7 +599,9 @@ class Peregrin::Epub
     end
 
 
-    def from_opf_root(opf_root, *args)
+    def from_opf_root(*args)
+      opf = @book.blueprint_for(:opf)
+      opf_root = File.dirname(opf.src)
       if opf_root && !opf_root.empty? && opf_root != '.'
         File.join(opf_root, *args)
       else
@@ -533,6 +612,16 @@ class Peregrin::Epub
 
     def escape_for_xpath(str)
       str.index("'") ? '"'+str+'"' : "'#{str}'"
+    end
+
+
+    def uri_unescape(str)
+      CGI.unescape(str)
+    end
+
+
+    def epub_version
+      @epub_version ? @epub_version.to_f : 0
     end
 
 
@@ -549,5 +638,6 @@ class Peregrin::Epub
   class FailureLoadingOCF < ValidationError; end
   class FailureLoadingOPF < ValidationError; end
   class FailureLoadingNCX < ValidationError; end
+  class FailureLoadingNAV < ValidationError; end
 
 end

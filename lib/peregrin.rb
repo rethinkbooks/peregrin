@@ -2,7 +2,7 @@ module Peregrin
 
   # Required libraries
   require 'fileutils'
-  require 'uri'
+  require 'cgi'
   require 'zipruby'
   require 'nokogiri'
   require 'mime/types'
@@ -14,6 +14,7 @@ module Peregrin
     "peregrin/book",
     "peregrin/resource",
     "peregrin/component",
+    "peregrin/blueprint",
     "peregrin/chapter",
     "peregrin/property",
     "peregrin/componentizer",

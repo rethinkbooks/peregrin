@@ -146,3 +146,13 @@ it's being kept as simple as possible.
 
 All this rhyming on "ook" put me in mind of the Took family. There is no
 deeper meaning.
+
+
+## History
+
+* 1.2.0
+  - Metadata files like OPF, OCX now first-class citizens called 'blueprints'
+  - Page progression direction from EPUB3 (@nono)
+  - Fixed-layout attributes for components (@nono)
+* 1.1.4
+  - Basic EPUB3 and EPUB fixed-layout read support (@klacointe)
