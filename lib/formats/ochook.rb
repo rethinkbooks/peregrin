@@ -58,13 +58,13 @@ class Peregrin::Ochook < Peregrin::Zhook
 
     # Index
     index_path = File.join(dir, INDEX_PATH)
-    File.open(index_path, 'w') { |f| f << htmlize(index) }
+    File.open(index_path, 'wb') { |f| f << htmlize(index) }
 
     # Resources
     @book.resources.each { |resource|
       full_path = File.join(dir, resource.src)
       FileUtils.mkdir_p(File.dirname(full_path))
-      File.open(full_path, 'w') { |f| f << @book.read_resource(resource) }
+      File.open(full_path, 'wb') { |f| f << @book.read_resource(resource) }
     }
 
     # Cover
@@ -78,7 +78,7 @@ class Peregrin::Ochook < Peregrin::Zhook
 
     # Manifest
     manifest_path = File.join(dir, MANIFEST_PATH)
-    File.open(manifest_path, 'w') { |f| f << manifest.join("\n") }
+    File.open(manifest_path, 'wb') { |f| f << manifest.join("\n") }
   end
 
 

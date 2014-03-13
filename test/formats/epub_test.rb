@@ -18,6 +18,13 @@ class Peregrin::Tests::EpubTest < Test::Unit::TestCase
     assert_equal(13, book.components.length)
   end
 
+  def test_epub_to_ochook
+    epub = Peregrin::Epub.read("test/fixtures/epubs/bigdata.epub")      
+    ochook = Peregrin::Ochook.new(epub.to_book(:componentize => true))
+    book = ochook.to_book(:componentize => true)
+    assert_equal(13, book.components.length)
+  end
+
   def test_write_to_epub
     epub = Peregrin::Epub.new(strunk_book)
     epub.write('test/output/strunk_test.epub')
