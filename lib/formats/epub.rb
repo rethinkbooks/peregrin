@@ -427,7 +427,7 @@ class Peregrin::Epub
 
         doc = Nokogiri::HTML::Document.parse(cmpt.contents)
         html = root_to_xhtml(doc.root)
-        File.open(working_dir(OEBPS, cmpt.src), 'w') { |f| f.write(html) }
+        File.open(working_dir(OEBPS, cmpt.src), 'wb') { |f| f.write(html) }
       }
 
       # Other components (@book.resources)
@@ -527,7 +527,7 @@ class Peregrin::Epub
 
     def zip_it_up(filename)
       path = working_dir("..", filename)
-      File.open(working_dir("mimetype"), 'w') { |f|
+      File.open(working_dir("mimetype"), 'wb') { |f|
         f.write(MIMETYPE_MAP['.epub'])
       }
       File.unlink(path)  if File.exists?(path)
@@ -580,7 +580,7 @@ class Peregrin::Epub
         yield(xml)
       }
       FileUtils.mkdir_p(File.dirname(path))
-      File.open(path, 'w') { |f|
+      File.open(path, 'wb') { |f|
         builder.doc.write_xml_to(f, :encoding => 'UTF-8', :indent => 2)
       }
       path.gsub(/^#{working_dir(OEBPS)}\//, '')
