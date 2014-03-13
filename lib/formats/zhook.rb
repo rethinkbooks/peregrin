@@ -115,7 +115,7 @@ class Peregrin::Zhook
         cmpt_xpaths.push(xpath)
         doc = componentizer.generate_component(xpath)
         Peregrin::Component.new(uri_for_xpath(xpath, cmpt_xpaths), doc)
-      }
+      }      
 
       # Add rel links and convert to html string
       boilerplate_rel_links <<

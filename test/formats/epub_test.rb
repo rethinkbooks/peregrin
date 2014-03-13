@@ -11,6 +11,12 @@ class Peregrin::Tests::EpubTest < Test::Unit::TestCase
     assert_equal("William Strunk Jr.", book.property_for('creator'))
   end
 
+  def test_epub_to_zhook
+    epub = Peregrin::Epub.read("test/fixtures/epubs/bigdata.epub")      
+    zhook = Peregrin::Zhook.new(epub.to_book(:componentize => true))
+    book = zhook.to_book(:componentize => true)
+    assert_equal(13, book.components.length)
+  end
 
   def test_write_to_epub
     epub = Peregrin::Epub.new(strunk_book)

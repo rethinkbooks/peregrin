@@ -15,7 +15,7 @@ class Peregrin::Componentizer
   def process(from)
     @component_xpaths = []
     walk(from)
-    @component_xpaths.reject! { |xpath| emptied?(xpath) }
+    @component_xpaths.reject! { |xpath| emptied?(xpath) }    
   end
 
 
@@ -79,8 +79,8 @@ class Peregrin::Componentizer
     # The recursive method for walking the tree - checks if the current node
     # is a component, then checks each child of the current node.
     #
-    def walk(node)
-      return  unless componentizable?(node)
+    def walk(node)      
+      return  unless componentizable?(node)      
       @component_xpaths.push(node.path)
       node.children.each { |c| walk(c) }
     end
@@ -90,7 +90,7 @@ class Peregrin::Componentizer
     #   1) Is a body or article element (or a div.article)?
     #   2) Are all subsequent siblings also componentizable?
     #
-    def componentizable?(node)
+    def componentizable?(node) 
       begin
         return false  unless (
           %w[body article].include?(node.name.downcase) ||
@@ -100,7 +100,7 @@ class Peregrin::Componentizer
             node['class'].match(/\barticle\b/)
           )
         )
-      end while node = node.next
+      end while node = node.next_element
       true
     end
 
@@ -108,7 +108,7 @@ class Peregrin::Componentizer
     # True if all children are either componentizable or blank text nodes.
     #
     def emptied?(xpath)
-      node = @document.at_xpath(xpath)
+      node = @document.at_xpath(xpath)      
       node.children.all? { |ch|
         @component_xpaths.include?(ch.path) ||
         (ch.text? && ch.content.strip.empty?)

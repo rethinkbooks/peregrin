@@ -24,7 +24,7 @@ spec = Gem::Specification.new do |s|
     '--title', 'Peregrin',
     '--main', 'README.md'
   ]
-  s.add_dependency('nokogiri')
+  s.add_dependency('nokogiri', '~> 1.5.10')
   s.add_dependency('zipruby')
   s.add_dependency('mime-types')
 
